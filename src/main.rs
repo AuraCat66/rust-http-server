@@ -1,8 +1,12 @@
 use std::{
     io::{BufReader, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
-    str::FromStr,
 };
+
+use request::ClientRequest;
+
+mod errors;
+mod request;
 
 const END_OF_LINE: &str = "\r\n";
 
@@ -26,42 +30,36 @@ fn handle_connection(stream: &mut TcpStream) {
 
     // Our buffer for reading any data sent by the client
 
-    let mut keep_alive = false;
+    let keep_alive = false;
 
     let mut bytes = buf_reader.bytes();
-    while true {
-        let mut http_request = String::new();
+    loop {
+        let mut raw_request = String::new();
 
         // We read byte by byte and we push each character into the buffer
         // This is for the HTTP method and the headers, (todo:) the body is read afterwards
         for byte in bytes.by_ref() {
             let byte = byte.unwrap();
             let char = byte as char;
-            http_request.push(char);
+            raw_request.push(char);
             // If character is \n and the request ends with \r\n\r\n, we stop reading
-            if char == '\n' && http_request.ends_with("\r\n\r\n") {
+            if char == '\n' && raw_request.ends_with("\r\n\r\n") {
                 break;
             }
         }
 
-        let lines: Vec<&str> = http_request.split("\r\n").collect();
-        let method: &str;
+        let request = ClientRequest::parse_request(&raw_request);
 
-        match lines[0].split_once("/") {
-            None => panic!("Couldn't parse HTTP method"),
-            Some((prefix, _)) => method = prefix,
-        };
+        println!("{:?}", raw_request.split("\r\n").collect::<Vec<&str>>());
 
-        println!("{:?}", http_request.split("\r\n").collect::<Vec<&str>>());
-
-        respond_to_request(stream, &http_request);
+        respond_to_request(stream, &request);
         if !keep_alive {
             break;
         }
     }
 }
 
-fn respond_to_request(stream: &mut TcpStream, _request: &str) {
+fn respond_to_request(stream: &mut TcpStream, _request: &ClientRequest) {
     // The body of the HTTP response
     let message_body = "uwu\n".to_string();
     // The response status
