@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use crate::END_OF_LINE;
 use crate::errors::ParseError;
 
 #[derive(Debug)]
@@ -18,12 +17,12 @@ impl ClientRequest {
 
         let method = match lines[0].split_once("/") {
             None => Err(ParseError::HttpMethod),
-            Some((prefix, _)) => HttpMethod::from_str(prefix),
+            Some((prefix, _)) => HttpMethod::from_str(prefix.trim()),
         }?;
         let raw_headers: Vec<&str> = lines[1..]
             .iter()
             .copied()
-            .filter(|line| line.trim() != END_OF_LINE)
+            .filter(|line| !line.is_empty())
             .collect();
         let headers = Headers::parse_headers(&raw_headers)?;
 
