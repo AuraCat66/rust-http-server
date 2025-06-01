@@ -3,12 +3,14 @@ use std::{error::Error, fmt::Display};
 #[derive(Debug)]
 pub enum ParseError {
     HttpMethod,
+    HttpVersion,
     Headers,
 }
 impl Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let error_string = match self {
             Self::HttpMethod => "Incorrect HTTP method.",
+            Self::HttpVersion => "Incorrect HTTP version.",
             Self::Headers => "Incorrect headers.",
         };
         write!(f, "ParseError: {error_string}")

@@ -1,8 +1,11 @@
 use std::collections::HashMap;
-use std::ops::Deref;
+use std::fmt::Display;
+use std::io::Write;
+use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
-use crate::errors::ParseError;
+use crate::END_OF_LINE;
+use crate::errors::{ParseError, ServerError};
 
 #[derive(Debug)]
 pub struct ClientRequest {
@@ -15,9 +18,15 @@ impl ClientRequest {
     pub fn parse_request(raw_request: &str) -> Result<Self, ParseError> {
         let lines: Vec<&str> = raw_request.split("\r\n").collect();
 
-        let method = match lines[0].split_once("/") {
+        let (method, http_version) = match lines[0].split_once("/") {
             None => Err(ParseError::HttpMethod),
-            Some((prefix, _)) => HttpMethod::from_str(prefix.trim()),
+            Some((prefix, suffix)) => Ok((
+                HttpMethod::from_str(prefix.trim())?,
+                match suffix.split_once("/") {
+                    None => Err(ParseError::HttpVersion),
+                    Some((_, version)) => Ok(version.to_owned()),
+                }?,
+            )),
         }?;
         let raw_headers: Vec<&str> = lines[1..]
             .iter()
@@ -29,10 +38,49 @@ impl ClientRequest {
         let message_body = Vec::new();
         Ok(Self {
             method,
-            http_version: "1.1".to_owned(),
+            http_version,
             headers,
             message_body,
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct Response {
+    pub status: String,
+    pub headers: Headers,
+    message_body: Vec<u8>,
+}
+impl Default for Response {
+    fn default() -> Self {
+        let mut headers = Headers::default();
+        headers.insert("Content-Type".to_owned(), "text/html".to_owned());
+        Self {
+            status: "200 OK".to_owned(),
+            headers,
+            message_body: Default::default(),
+        }
+    }
+}
+impl Response {
+    pub fn set_body(&mut self, new_body: &[u8]) {
+        self.message_body = new_body.to_owned();
+        self.headers
+            .insert("Content-Length".to_owned(), new_body.len().to_string());
+    }
+
+    pub fn validate(self) -> Result<Vec<u8>, ServerError> {
+        let mut bytes = Vec::new();
+        let status = "HTTP/1.1 ".to_owned() + &self.status + END_OF_LINE;
+        let headers = self.headers.to_string();
+
+        bytes.write_all(status.as_bytes())?;
+        bytes.write_all(headers.as_bytes())?;
+        bytes.write_all(END_OF_LINE.as_bytes())?;
+        if !self.message_body.is_empty() {
+            bytes.write_all(&self.message_body)?;
+        }
+        Ok(bytes)
     }
 }
 
@@ -44,6 +92,11 @@ impl Deref for Headers {
     type Target = HashMap<String, String>;
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+impl DerefMut for Headers {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 impl Headers {
@@ -61,6 +114,17 @@ impl Headers {
         }
 
         Ok(headers)
+    }
+}
+impl Display for Headers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        (self
+            .iter()
+            .map(|(key, value)| format!("{key}: {value}"))
+            .collect::<Vec<String>>()
+            .join(END_OF_LINE)
+            + END_OF_LINE)
+            .fmt(f)
     }
 }
 
@@ -92,5 +156,26 @@ impl FromStr for HttpMethod {
             "PATCH" => Ok(Self::Patch),
             _ => Err(ParseError::HttpMethod),
         }
+    }
+}
+impl Display for HttpMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Get => "GET",
+            Self::Head => "HEAD",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Delete => "DELETE",
+            Self::Connect => "CONNECT",
+            Self::Options => "OPTIONS",
+            Self::Trace => "TRACE",
+            Self::Patch => "PATCH",
+        };
+        s.fmt(f)
+    }
+}
+impl Default for HttpMethod {
+    fn default() -> Self {
+        Self::Get
     }
 }

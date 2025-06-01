@@ -5,7 +5,7 @@ use std::{
 };
 
 use errors::ServerError;
-use request::ClientRequest;
+use request::{ClientRequest, Response};
 
 mod errors;
 mod request;
@@ -66,30 +66,13 @@ fn handle_connection(stream: &mut TcpStream) -> Result<(), ServerError> {
     Ok(())
 }
 
-fn respond_to_request(stream: &mut TcpStream, _request: &ClientRequest) -> std::io::Result<()> {
-    // The body of the HTTP response
-    let message_body = "uwu\n".to_string();
-    // The response status
-    let status = b"HTTP/1.1 200 OK\r\n";
-    // The response headers
-    let headers = [
-        "Content-Type: text/html".into(),
-        format!("Content-Length: {}", message_body.len()),
-    ];
+fn respond_to_request(stream: &mut TcpStream, _request: &ClientRequest) -> Result<(), ServerError> {
+    let mut response = Response::default();
+    response.set_body(b"test\n");
 
-    // The response buffer
-    let mut response = Vec::new();
-    // We write the status in this buffer/array of u8s
-    response.write_all(status)?;
-    // Now the headers
-    let header_string = headers.join("\r\n") + END_OF_LINE;
-    response.write_all(header_string.as_bytes())?;
-    // The mandatory empty line separating the headers and the message body
-    response.write_all(END_OF_LINE.as_bytes())?;
-    // And now we write the message body
-    response.write_all(message_body.as_bytes())?;
+    let response = response.validate()?;
 
-    // We write (or send) the entire response to the stream
+    // We send the response to the client
     stream.write_all(&response)?;
 
     Ok(())
