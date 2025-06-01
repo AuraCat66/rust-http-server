@@ -13,27 +13,27 @@ pub struct ClientRequest {
     pub message_body: Vec<u8>,
 }
 impl ClientRequest {
-    pub fn parse_request(raw_request: &str) -> Self {
+    pub fn parse_request(raw_request: &str) -> Result<Self, ParseError> {
         let lines: Vec<&str> = raw_request.split("\r\n").collect();
 
-        let method: HttpMethod = match lines[0].split_once("/") {
-            None => panic!("Couldn't parse HTTP method"),
-            Some((prefix, _)) => HttpMethod::from_str(prefix).unwrap(),
-        };
+        let method = match lines[0].split_once("/") {
+            None => Err(ParseError::HttpMethod),
+            Some((prefix, _)) => HttpMethod::from_str(prefix),
+        }?;
         let raw_headers: Vec<&str> = lines[1..]
             .iter()
             .copied()
             .filter(|line| line.trim() != END_OF_LINE)
             .collect();
-        let headers = Headers::parse_headers(&raw_headers).unwrap();
+        let headers = Headers::parse_headers(&raw_headers)?;
 
         let message_body = Vec::new();
-        Self {
+        Ok(Self {
             method,
             http_version: "1.1".to_owned(),
             headers,
             message_body,
-        }
+        })
     }
 }
 
